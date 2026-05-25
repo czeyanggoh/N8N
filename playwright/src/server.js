@@ -1,4 +1,3 @@
-// HTTP API n8n calls. POST /upload with multipart file → runs the full DBS flow.
 require('dotenv').config();
 
 const express = require('express');
@@ -29,9 +28,7 @@ app.use(express.json());
 
 app.use((req, res, next) => {
   if (req.path === '/health') return next();
-  if (req.get('X-API-Key') !== API_KEY) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
+  if (req.get('X-API-Key') !== API_KEY) return res.status(401).json({ error: 'unauthorized' });
   next();
 });
 
@@ -39,9 +36,13 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file field required' });
+
+  // orgName: from form body field, else fall back to env var (single-org setups)
+  const orgName = (req.body && req.body.orgName) || process.env.DBS_ORG_NAME || null;
+
   const filePath = req.file.path;
   const requestId = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  const log = logger.child({ requestId });
+  const log = logger.child({ requestId, orgName });
 
   log.info({ originalname: req.file.originalname, size: req.file.size }, 'upload received');
 
@@ -53,7 +54,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     const page = await ctx.context.newPage();
 
     await login(page, log);
-    await selectOrganisation(page, log);
+    await selectOrganisation(page, orgName, log);   // orgName passed explicitly
     await uploadPaymentFile(page, filePath, log);
     await persistState(ctx.context, log);
     await logout(page, log);
@@ -61,25 +62,20 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     screenshotPath = path.join(SHOT_DIR, requestId + '-success.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
-    res.json({ ok: true, requestId, screenshot: path.basename(screenshotPath) });
+    res.json({ ok: true, requestId, orgName, screenshot: path.basename(screenshotPath) });
   } catch (err) {
-    log.error({ err: err.message, stack: err.stack }, 'flow failed');
+    log.error({ err: err.message }, 'flow failed');
     if (browser) {
       try {
-        const ctxs = browser.contexts();
-        const pages = ctxs[0] ? await ctxs[0].pages() : [];
+        const pages = browser.contexts()[0]?.pages() || [];
         if (pages[0]) {
           screenshotPath = path.join(SHOT_DIR, requestId + '-error.png');
           await pages[0].screenshot({ path: screenshotPath, fullPage: true });
         }
       } catch (_) {}
     }
-    res.status(500).json({
-      ok: false,
-      requestId,
-      error: err.message,
-      screenshot: screenshotPath ? path.basename(screenshotPath) : null,
-    });
+    res.status(500).json({ ok: false, requestId, orgName, error: err.message,
+      screenshot: screenshotPath ? path.basename(screenshotPath) : null });
   } finally {
     if (browser) await browser.close().catch(() => {});
     fs.unlink(filePath, () => {});

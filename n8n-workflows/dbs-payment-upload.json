@@ -4,9 +4,15 @@
     {
       "parameters": {
         "formTitle": "Upload Payment File to DBS IDEAL",
-        "formDescription": "Drop a DBS-format payment file (BIBF / ISO 20022 pain.001 / CSV) and the bot will sign in, select the organisation, and submit it. Have your DBS digital token ready — you'll need to approve the login push within 3 minutes.",
+        "formDescription": "Drop a DBS-format payment file and select which organisation to upload under. Approve the digital token push on your phone within 3 minutes.",
         "formFields": {
           "values": [
+            {
+              "fieldLabel": "Organisation Name",
+              "fieldType": "text",
+              "requiredField": true,
+              "placeholder": "Exact name as shown on the DBS org picker screen"
+            },
             {
               "fieldLabel": "Payment file",
               "fieldType": "file",
@@ -23,7 +29,7 @@
         },
         "options": {
           "respondWith": "showText",
-          "formSubmittedText": "File received. Approve the DBS login on your phone now — you have 3 minutes. The bot will reply here when done.",
+          "formSubmittedText": "File received. Approve the DBS login on your phone now — you have 3 minutes.",
           "buttonLabel": "Submit"
         }
       },
@@ -52,6 +58,10 @@
               "parameterType": "formBinaryData",
               "name": "file",
               "inputDataFieldName": "Payment_file"
+            },
+            {
+              "name": "orgName",
+              "value": "={{ $json['Organisation Name'] }}"
             }
           ]
         },
@@ -91,7 +101,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "=Upload confirmed by DBS IDEAL.\n\nRequest ID: {{ $json.requestId }}\nScreenshot: {{ $json.screenshot }}"
+        "responseBody": "=Upload confirmed by DBS IDEAL.\n\nOrg: {{ $json.orgName }}\nRequest ID: {{ $json.requestId }}\nScreenshot: {{ $json.screenshot }}"
       },
       "id": "respond-ok",
       "name": "Respond OK",
@@ -102,7 +112,7 @@
     {
       "parameters": {
         "respondWith": "text",
-        "responseBody": "=Upload failed.\n\nError: {{ $json.error }}\nRequest ID: {{ $json.requestId }}\nScreenshot: {{ $json.screenshot }}\n\nCheck the playwright container logs: docker logs dbs-playwright"
+        "responseBody": "=Upload FAILED.\n\nOrg: {{ $json.orgName }}\nError: {{ $json.error }}\nRequest ID: {{ $json.requestId }}\n\nCheck logs: docker logs dbs-playwright"
       },
       "id": "respond-fail",
       "name": "Respond Fail",

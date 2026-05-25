@@ -4,22 +4,16 @@
 const URL = process.env.DBS_IDEAL_URL || 'https://ideal.dbs.com.sg/';
 const MFA_TIMEOUT_MS = parseInt(process.env.MFA_TIMEOUT_MS || '180000', 10);
 
-// ---- SELECTORS (verify these on the live site) ----
 const S = {
   loginUsername: 'input[name="username"], input#userId, [data-testid="username"]',
   loginPassword: 'input[name="password"], input[type="password"]',
   loginSubmit: 'button[type="submit"], button:has-text("Login"), button:has-text("Log In")',
-
-  // After submit, DBS shows a "approve on your iBanking app" page.
-  // We treat reaching the post-login dashboard URL as proof of MFA success.
   postLoginUrlPattern: /\/(dashboard|home|landing|accounts)/i,
 
-  // Org picker (multi-org users only — single-org accounts skip this)
   orgRow: (name) =>
     '[role="row"]:has-text(' + JSON.stringify(name) + '), li:has-text(' + JSON.stringify(name) + '), button:has-text(' + JSON.stringify(name) + ')',
   orgConfirm: 'button:has-text("Continue"), button:has-text("Confirm"), button:has-text("Select")',
 
-  // Payments / file upload nav
   navPayments: 'a:has-text("Payments"), [data-nav="payments"]',
   navFileUpload: 'a:has-text("File Upload"), a:has-text("Bulk"), a:has-text("Upload Payment")',
   uploadInput: 'input[type="file"]',
@@ -33,7 +27,6 @@ async function login(page, logger) {
   logger.info({ URL }, 'navigating to DBS IDEAL');
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
 
-  // Sometimes IDEAL shows a landing splash with a separate "Login" link
   const splashLogin = page.locator('a:has-text("Login"), a:has-text("Log In")').first();
   if (await splashLogin.isVisible({ timeout: 3000 }).catch(() => false)) {
     await splashLogin.click();
@@ -48,16 +41,16 @@ async function login(page, logger) {
   logger.info('MFA approved');
 }
 
-async function selectOrganisation(page, logger) {
-  const orgName = process.env.DBS_ORG_NAME;
+// orgName is passed explicitly per-request (from n8n form), not read from env here.
+async function selectOrganisation(page, orgName, logger) {
   if (!orgName) {
-    logger.warn('DBS_ORG_NAME not set — skipping org picker (single-org account?)');
+    logger.warn('no orgName provided — skipping org picker (single-org account or caller omitted it)');
     return;
   }
 
   const picker = page.locator(S.orgRow(orgName)).first();
   if (!(await picker.isVisible({ timeout: 5000 }).catch(() => false))) {
-    logger.info('no org picker visible — proceeding');
+    logger.info({ orgName }, 'no org picker visible — proceeding');
     return;
   }
   await picker.click();
