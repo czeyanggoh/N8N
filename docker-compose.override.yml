@@ -1,5 +1,4 @@
-# Adds the Playwright service to the existing n8n stack at /docker/n8n/docker-compose.yml.
-# Run with:
+# Extends /docker/n8n/docker-compose.yml. Run with:
 #   docker compose -f /docker/n8n/docker-compose.yml -f /opt/dbs-automation/docker-compose.override.yml up -d --build
 
 services:
@@ -9,23 +8,42 @@ services:
     restart: unless-stopped
     env_file:
       - /opt/dbs-automation/playwright/.env
-    # Internal only — never expose to the public internet
     expose:
       - "3000"
     volumes:
       - playwright_state:/app/state
       - playwright_uploads:/app/uploads
       - playwright_shots:/app/screenshots
-    # SHM is required for Chromium stability
     shm_size: "2gb"
     networks:
       - default
 
-  # n8n needs to talk to playwright on the same network. The override merges with
-  # the upstream service — we don't redeclare image/labels here.
+  # Reverse-proxies https://n8n.cy-bm.sg/__deploy/ → host's webhook listener (systemd).
+  # Sidecar pattern lets us reuse Traefik's TLS without editing the upstream compose.
+  deploy-proxy:
+    image: nginx:alpine
+    container_name: dbs-deploy-proxy
+    restart: unless-stopped
+    volumes:
+      - /opt/dbs-automation/deploy-proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.deploy.rule=Host(`${SUBDOMAIN}.${DOMAIN_NAME}`) && PathPrefix(`/__deploy`)"
+      - traefik.http.routers.deploy.entrypoints=websecure
+      - traefik.http.routers.deploy.tls=true
+      - traefik.http.routers.deploy.tls.certresolver=mytlschallenge
+      - traefik.http.middlewares.deploy-strip.stripprefix.prefixes=/__deploy
+      - traefik.http.routers.deploy.middlewares=deploy-strip@docker
+      - traefik.http.services.deploy.loadbalancer.server.port=80
+    networks:
+      - default
+
   n8n:
     depends_on:
       - playwright
+      - deploy-proxy
 
 volumes:
   playwright_state:
