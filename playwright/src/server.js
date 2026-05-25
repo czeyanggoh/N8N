@@ -11,10 +11,35 @@ const { login, selectOrganisation, uploadPaymentFile, logout } = require('./lib/
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const API_KEY = process.env.PLAYWRIGHT_API_KEY;
+const ORG_MAP_PATH = process.env.ORG_MAP_PATH || '/repo/config/org-map.json';
 
 if (!API_KEY) {
   logger.error('PLAYWRIGHT_API_KEY not set — refusing to start');
   process.exit(1);
+}
+
+// Load org mapping (friendly name / Xero name → DBS org picker display string)
+function loadOrgMap() {
+  try {
+    const raw = fs.readFileSync(ORG_MAP_PATH, 'utf8');
+    return JSON.parse(raw).orgs || {};
+  } catch (err) {
+    logger.warn({ err: err.message, ORG_MAP_PATH }, 'could not load org-map.json — using raw orgName');
+    return {};
+  }
+}
+
+function resolveDbsOrgName(inputName) {
+  if (!inputName) return process.env.DBS_ORG_NAME || null;
+  const map = loadOrgMap();
+  // Exact match first, then case-insensitive
+  if (map[inputName]) return map[inputName];
+  const lower = inputName.toLowerCase();
+  const found = Object.entries(map).find(([k]) => k.toLowerCase() === lower);
+  if (found) return found[1];
+  // No mapping found — pass through as-is (works if user typed the DBS display string directly)
+  logger.warn({ inputName }, 'no org-map entry found — using raw value as DBS org name');
+  return inputName;
 }
 
 const UPLOAD_DIR = '/app/uploads';
@@ -34,27 +59,32 @@ app.use((req, res, next) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// GET /orgs — list available friendly names so n8n/callers can validate
+app.get('/orgs', (_req, res) => {
+  const map = loadOrgMap();
+  res.json({ orgs: Object.keys(map) });
+});
+
 app.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'file field required' });
 
-  // orgName: from form body field, else fall back to env var (single-org setups)
-  const orgName = (req.body && req.body.orgName) || process.env.DBS_ORG_NAME || null;
+  const inputOrgName = (req.body && req.body.orgName) || null;
+  const dbsOrgName = resolveDbsOrgName(inputOrgName);
 
   const filePath = req.file.path;
   const requestId = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  const log = logger.child({ requestId, orgName });
+  const log = logger.child({ requestId, inputOrgName, dbsOrgName });
 
   log.info({ originalname: req.file.originalname, size: req.file.size }, 'upload received');
 
-  let browser;
-  let screenshotPath;
+  let browser, screenshotPath;
   try {
     const ctx = await launchContext({ logger: log });
     browser = ctx.browser;
     const page = await ctx.context.newPage();
 
     await login(page, log);
-    await selectOrganisation(page, orgName, log);   // orgName passed explicitly
+    await selectOrganisation(page, dbsOrgName, log);
     await uploadPaymentFile(page, filePath, log);
     await persistState(ctx.context, log);
     await logout(page, log);
@@ -62,7 +92,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     screenshotPath = path.join(SHOT_DIR, requestId + '-success.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
 
-    res.json({ ok: true, requestId, orgName, screenshot: path.basename(screenshotPath) });
+    res.json({ ok: true, requestId, inputOrgName, dbsOrgName,
+      screenshot: path.basename(screenshotPath) });
   } catch (err) {
     log.error({ err: err.message }, 'flow failed');
     if (browser) {
@@ -74,8 +105,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
         }
       } catch (_) {}
     }
-    res.status(500).json({ ok: false, requestId, orgName, error: err.message,
-      screenshot: screenshotPath ? path.basename(screenshotPath) : null });
+    res.status(500).json({ ok: false, requestId, inputOrgName, dbsOrgName,
+      error: err.message, screenshot: screenshotPath ? path.basename(screenshotPath) : null });
   } finally {
     if (browser) await browser.close().catch(() => {});
     fs.unlink(filePath, () => {});

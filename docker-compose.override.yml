@@ -1,6 +1,3 @@
-# Extends /docker/n8n/docker-compose.yml. Run with:
-#   docker compose -f /docker/n8n/docker-compose.yml -f /opt/dbs-automation/docker-compose.override.yml up -d --build
-
 services:
   playwright:
     build: /opt/dbs-automation/playwright
@@ -14,12 +11,11 @@ services:
       - playwright_state:/app/state
       - playwright_uploads:/app/uploads
       - playwright_shots:/app/screenshots
+      - /opt/dbs-automation/config:/repo/config:ro
     shm_size: "2gb"
     networks:
       - default
 
-  # Reverse-proxies https://n8n.cy-bm.sg/__deploy/ → host's webhook listener (systemd).
-  # Sidecar pattern lets us reuse Traefik's TLS without editing the upstream compose.
   deploy-proxy:
     image: nginx:alpine
     container_name: dbs-deploy-proxy

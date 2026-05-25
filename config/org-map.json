@@ -1,0 +1,7 @@
+{
+  "_comment": "Map your friendly org name (Xero name, internal name, whatever you call it) to the EXACT text shown on the DBS IDEAL organisation picker screen. Run the discovery session to confirm the DBS display strings.",
+  "orgs": {
+    "Acme Pte Ltd":        "ACME PTE LTD (SG12345678)",
+    "Beta Holdings":       "BETA HOLDINGS PTE. LTD. (SG87654321)"
+  }
+}
