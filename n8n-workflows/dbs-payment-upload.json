@@ -1,0 +1,127 @@
+{
+  "name": "DBS IDEAL — Payment Upload",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload Payment File to DBS IDEAL",
+        "formDescription": "Drop a DBS-format payment file (BIBF / ISO 20022 pain.001 / CSV) and the bot will sign in, select the organisation, and submit it. Have your DBS digital token ready — you'll need to approve the login push within 3 minutes.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Payment file",
+              "fieldType": "file",
+              "requiredField": true,
+              "multipleFiles": false,
+              "acceptFileTypes": ".xml,.txt,.csv,.bibf"
+            },
+            {
+              "fieldLabel": "Notes (optional)",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {
+          "respondWith": "showText",
+          "formSubmittedText": "File received. Approve the DBS login on your phone now — you have 3 minutes. The bot will reply here when done.",
+          "buttonLabel": "Submit"
+        }
+      },
+      "id": "form-trigger",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "dbs-payment-upload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://playwright:3000/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.PLAYWRIGHT_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "Payment_file"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000,
+          "response": {
+            "response": { "fullResponse": false, "responseFormat": "json" }
+          }
+        }
+      },
+      "id": "playwright-call",
+      "name": "Call Playwright",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-ok",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=Upload confirmed by DBS IDEAL.\n\nRequest ID: {{ $json.requestId }}\nScreenshot: {{ $json.screenshot }}"
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=Upload failed.\n\nError: {{ $json.error }}\nRequest ID: {{ $json.requestId }}\nScreenshot: {{ $json.screenshot }}\n\nCheck the playwright container logs: docker logs dbs-playwright"
+      },
+      "id": "respond-fail",
+      "name": "Respond Fail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1060, 400]
+    }
+  ],
+  "connections": {
+    "Form Trigger": { "main": [[{ "node": "Call Playwright", "type": "main", "index": 0 }]] },
+    "Call Playwright": { "main": [[{ "node": "Success?", "type": "main", "index": 0 }]] },
+    "Success?": {
+      "main": [
+        [{ "node": "Respond OK", "type": "main", "index": 0 }],
+        [{ "node": "Respond Fail", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": [{ "name": "dbs" }, { "name": "banking" }]
+}

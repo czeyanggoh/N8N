@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.env
+.env.local
+*.secret
+playwright/uploads/*
+!playwright/uploads/.gitkeep
+playwright/downloads/*
+!playwright/downloads/.gitkeep
+playwright/state/*
+!playwright/state/.gitkeep
+playwright/screenshots/*
+!playwright/screenshots/.gitkeep
+playwright/traces/*
+!playwright/traces/.gitkeep
+.DS_Store

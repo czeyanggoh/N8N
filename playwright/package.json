@@ -1,0 +1,20 @@
+{
+  "name": "dbs-automation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright service that drives DBS IDEAL on behalf of n8n",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "discover": "node src/discover.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "playwright": "^1.47.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "pino": "^9.4.0",
+    "dotenv": "^16.4.5"
+  }
+}

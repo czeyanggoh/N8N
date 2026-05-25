@@ -1,0 +1,33 @@
+# Adds the Playwright service to the existing n8n stack at /docker/n8n/docker-compose.yml.
+# Run with:
+#   docker compose -f /docker/n8n/docker-compose.yml -f /opt/dbs-automation/docker-compose.override.yml up -d --build
+
+services:
+  playwright:
+    build: /opt/dbs-automation/playwright
+    container_name: dbs-playwright
+    restart: unless-stopped
+    env_file:
+      - /opt/dbs-automation/playwright/.env
+    # Internal only — never expose to the public internet
+    expose:
+      - "3000"
+    volumes:
+      - playwright_state:/app/state
+      - playwright_uploads:/app/uploads
+      - playwright_shots:/app/screenshots
+    # SHM is required for Chromium stability
+    shm_size: "2gb"
+    networks:
+      - default
+
+  # n8n needs to talk to playwright on the same network. The override merges with
+  # the upstream service — we don't redeclare image/labels here.
+  n8n:
+    depends_on:
+      - playwright
+
+volumes:
+  playwright_state:
+  playwright_uploads:
+  playwright_shots:

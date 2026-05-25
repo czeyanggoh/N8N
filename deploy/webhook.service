@@ -1,0 +1,17 @@
+[Unit]
+Description=DBS automation GitHub deploy webhook
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/dbs-automation/deploy
+EnvironmentFile=/opt/dbs-automation/deploy/webhook.env
+ExecStart=/usr/bin/node /opt/dbs-automation/deploy/webhook.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
